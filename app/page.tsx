@@ -1,0 +1,478 @@
+"use client";
+
+import { useState, useMemo } from "react";
+
+// ── Scoring ──────────────────────────────────────────────────────────────────
+
+function computeScore(item) {
+  const now = Date.now();
+  let score = 0;
+
+  if (item.dueDate) {
+    const due = new Date(item.dueDate).getTime();
+    const days = (due - now) / (1000 * 60 * 60 * 24);
+    if (days < 0)        score += 200;
+    else if (days <= 1)  score += 100;
+    else if (days <= 3)  score += 80;
+    else if (days <= 7)  score += 60;
+    else if (days <= 14) score += 40;
+    else if (days <= 30) score += 20;
+  } else {
+    score += 5;
+  }
+
+  if (item.priority === "high")   score += 90;
+  if (item.priority === "medium") score += 60;
+  if (item.priority === "low")    score += 30;
+  if (item.type === "task")       score += 10;
+
+  const urgentWords = ["blocking", "urgent", "eod", "today", "asap", "critical"];
+  const text = `${item.title} ${item.notes || ""}`.toLowerCase();
+  if (urgentWords.some(w => text.includes(w))) score += 25;
+
+  return score;
+}
+
+// ── Freeform parser ───────────────────────────────────────────────────────────
+
+function parseFreeform(text) {
+  const lower = text.toLowerCase();
+  const title = text.split("\n")[0].slice(0, 80);
+
+  let priority = "medium";
+  if (/\b(urgent|critical|blocking|asap|high priority)\b/.test(lower)) priority = "high";
+  else if (/\b(low priority|whenever|someday|eventually)\b/.test(lower)) priority = "low";
+
+  let dueDate = "";
+  const todayMatch = /\b(today|eod|end of day)\b/.test(lower);
+  const tomorrowMatch = /\btomorrow\b/.test(lower);
+  const dayMatch = lower.match(/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/);
+
+  const today = new Date();
+  if (todayMatch) {
+    dueDate = today.toISOString().split("T")[0];
+  } else if (tomorrowMatch) {
+    const t = new Date(today);
+    t.setDate(t.getDate() + 1);
+    dueDate = t.toISOString().split("T")[0];
+  } else if (dayMatch) {
+    const days = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
+    const target = days.indexOf(dayMatch[1]);
+    const current = today.getDay();
+    const diff = (target - current + 7) % 7 || 7;
+    const d = new Date(today);
+    d.setDate(d.getDate() + diff);
+    dueDate = d.toISOString().split("T")[0];
+  }
+
+  return { title, priority, dueDate, notes: text, type: "task" };
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function uid() {
+  return Math.random().toString(36).slice(2, 10);
+}
+
+function formatDate(str) {
+  if (!str) return "";
+  const d = new Date(str + "T12:00:00");
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function daysLabel(str) {
+  if (!str) return null;
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const due = new Date(str + "T00:00:00");
+  const diff = Math.round((due - now) / (1000 * 60 * 60 * 24));
+  if (diff < 0)  return { label: `${Math.abs(diff)}d overdue`, color: "#ff4d4d" };
+  if (diff === 0) return { label: "today", color: "#ffaa00" };
+  if (diff <= 3)  return { label: `${diff}d`, color: "#ffaa00" };
+  if (diff <= 7)  return { label: `${diff}d`, color: "#a0c4ff" };
+  return { label: `${diff}d`, color: "#5a5a6a" };
+}
+
+const PRIORITY_COLOR = { high: "#ff4d4d", medium: "#ffaa00", low: "#5a9e6f" };
+
+// ── Main component ────────────────────────────────────────────────────────────
+
+const EMPTY_FORM = { title: "", type: "task", dueDate: "", priority: "medium", notes: "", projectId: "" };
+
+export default function PriorityStack() {
+  const [items, setItems] = useState([]);
+  const [view, setView] = useState("stack"); // "stack" | "intake"
+  const [inputMode, setInputMode] = useState("structured"); // "structured" | "freeform"
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [freeformText, setFreeformText] = useState("");
+  const [expanded, setExpanded] = useState(null);
+  const [editing, setEditing] = useState(null);
+
+  const ranked = useMemo(() => {
+    return [...items]
+      .map(i => ({ ...i, score: computeScore(i) }))
+      .sort((a, b) => b.score - a.score);
+  }, [items]);
+
+  const projects = useMemo(() => items.filter(i => i.type === "project"), [items]);
+
+  function addItem(raw) {
+    const item = { ...EMPTY_FORM, ...raw, id: uid(), createdAt: Date.now() };
+    setItems(prev => [...prev, item]);
+  }
+
+  function submitStructured(e) {
+    e.preventDefault();
+    if (!form.title.trim()) return;
+    addItem(form);
+    setForm(EMPTY_FORM);
+  }
+
+  function submitFreeform(e) {
+    e.preventDefault();
+    if (!freeformText.trim()) return;
+    addItem(parseFreeform(freeformText));
+    setFreeformText("");
+  }
+
+  function deleteItem(id) {
+    setItems(prev => prev.filter(i => i.id !== id));
+    if (expanded === id) setExpanded(null);
+  }
+
+  function saveEdit(updated) {
+    setItems(prev => prev.map(i => i.id === updated.id ? updated : i));
+    setEditing(null);
+  }
+
+  function markDone(id) {
+    deleteItem(id);
+  }
+
+  return (
+    <div style={{
+      minHeight: "100vh",
+      background: "#0e0e16",
+      color: "#e8e8f0",
+      fontFamily: "'DM Sans', system-ui, sans-serif",
+      padding: "0",
+    }}>
+      {/* Header */}
+      <header style={{
+        borderBottom: "1px solid #1e1e2a",
+        padding: "16px 24px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        position: "sticky",
+        top: 0,
+        background: "#0e0e16",
+        zIndex: 10,
+      }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: "10px" }}>
+          <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "13px", color: "#5a5aff", letterSpacing: "0.1em" }}>PS</span>
+          <span style={{ fontSize: "15px", fontWeight: 600, color: "#e8e8f0" }}>Priority Stack</span>
+        </div>
+        <div style={{ display: "flex", gap: "8px" }}>
+          {["stack", "intake"].map(v => (
+            <button key={v} onClick={() => setView(v)} style={{
+              fontFamily: "'IBM Plex Mono', monospace",
+              fontSize: "11px",
+              padding: "5px 12px",
+              borderRadius: "3px",
+              border: "1px solid",
+              borderColor: view === v ? "#5a5aff" : "#2a2a36",
+              background: view === v ? "#5a5aff18" : "transparent",
+              color: view === v ? "#5a5aff" : "#5a5a6a",
+              cursor: "pointer",
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+            }}>{v}</button>
+          ))}
+        </div>
+      </header>
+
+      <div style={{ maxWidth: "680px", margin: "0 auto", padding: "24px 16px" }}>
+
+        {/* Input Panel */}
+        <div style={{
+          border: "1px solid #1e1e2a",
+          borderRadius: "6px",
+          background: "#13131c",
+          marginBottom: "24px",
+          overflow: "hidden",
+        }}>
+          {/* Mode toggle */}
+          <div style={{ display: "flex", borderBottom: "1px solid #1e1e2a" }}>
+            {["structured", "freeform"].map(m => (
+              <button key={m} onClick={() => setInputMode(m)} style={{
+                flex: 1,
+                padding: "10px",
+                background: inputMode === m ? "#1e1e2a" : "transparent",
+                border: "none",
+                color: inputMode === m ? "#e8e8f0" : "#5a5a6a",
+                fontFamily: "'IBM Plex Mono', monospace",
+                fontSize: "11px",
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                cursor: "pointer",
+              }}>{m}</button>
+            ))}
+          </div>
+
+          <div style={{ padding: "16px" }}>
+            {inputMode === "structured" ? (
+              <form onSubmit={submitStructured}>
+                <input
+                  placeholder="Task or project title"
+                  value={form.title}
+                  onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                  style={inputStyle}
+                />
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", margin: "8px 0" }}>
+                  <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))} style={selectStyle}>
+                    <option value="task">Task</option>
+                    <option value="project">Project</option>
+                  </select>
+                  <select value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))} style={selectStyle}>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                  </select>
+                  <input type="date" value={form.dueDate} onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))} style={selectStyle} />
+                </div>
+                {projects.length > 0 && (
+                  <select value={form.projectId} onChange={e => setForm(f => ({ ...f, projectId: e.target.value }))} style={{ ...selectStyle, marginBottom: "8px", width: "100%" }}>
+                    <option value="">No project</option>
+                    {projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+                  </select>
+                )}
+                <textarea
+                  placeholder="Notes (optional)"
+                  value={form.notes}
+                  onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+                  rows={2}
+                  style={{ ...inputStyle, resize: "vertical" }}
+                />
+                <button type="submit" style={submitBtnStyle}>Add to stack</button>
+              </form>
+            ) : (
+              <form onSubmit={submitFreeform}>
+                <textarea
+                  placeholder={`Describe in plain language.\n"Finish the Acme renewal deck by EOD Thursday — blocking the QBR"`}
+                  value={freeformText}
+                  onChange={e => setFreeformText(e.target.value)}
+                  rows={4}
+                  style={{ ...inputStyle, resize: "vertical" }}
+                />
+                <button type="submit" style={submitBtnStyle}>Parse + add</button>
+              </form>
+            )}
+          </div>
+        </div>
+
+        {/* Stack / Intake views */}
+        {items.length === 0 ? (
+          <div style={{ textAlign: "center", color: "#5a5a6a", fontFamily: "'IBM Plex Mono', monospace", fontSize: "12px", padding: "48px 0" }}>
+            stack is empty — add something above
+          </div>
+        ) : view === "stack" ? (
+          <StackView
+            ranked={ranked}
+            projects={projects}
+            expanded={expanded}
+            setExpanded={setExpanded}
+            editing={editing}
+            setEditing={setEditing}
+            onDelete={deleteItem}
+            onDone={markDone}
+            onSave={saveEdit}
+          />
+        ) : (
+          <IntakeView ranked={ranked} projects={projects} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Stack View ────────────────────────────────────────────────────────────────
+
+function StackView({ ranked, projects, expanded, setExpanded, editing, setEditing, onDelete, onDone, onSave }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+      {ranked.map((item, idx) => {
+        const dl = daysLabel(item.dueDate);
+        const isTop = idx === 0;
+        const isExpanded = expanded === item.id;
+        const isEditing = editing?.id === item.id;
+        const project = item.projectId ? projects.find(p => p.id === item.projectId) : null;
+
+        return (
+          <div key={item.id} style={{
+            border: `1px solid ${isTop ? "#ff4d4d44" : "#1e1e2a"}`,
+            borderRadius: "5px",
+            background: isTop ? "#1a1014" : "#13131c",
+            overflow: "hidden",
+          }}>
+            {/* Row */}
+            <div
+              onClick={() => !isEditing && setExpanded(isExpanded ? null : item.id)}
+              style={{ display: "flex", alignItems: "center", padding: "12px 14px", gap: "12px", cursor: "pointer" }}
+            >
+              {/* Rank */}
+              <span style={{
+                fontFamily: "'IBM Plex Mono', monospace",
+                fontSize: "11px",
+                color: isTop ? "#ff4d4d" : "#5a5a6a",
+                minWidth: "24px",
+                fontWeight: isTop ? 700 : 400,
+              }}>#{idx + 1}</span>
+
+              {/* Title */}
+              <span style={{ flex: 1, fontSize: "14px", fontWeight: isTop ? 600 : 400, color: isTop ? "#e8e8f0" : "#c0c0d0" }}>
+                {item.title}
+                {project && <span style={{ marginLeft: "8px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#5a5a6a" }}>↳ {project.title}</span>}
+              </span>
+
+              {/* Badges */}
+              <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                {dl && <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: dl.color }}>{dl.label}</span>}
+                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: PRIORITY_COLOR[item.priority] }}>
+                  {item.priority[0].toUpperCase()}
+                </span>
+                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#2a2a36", background: "#1e1e2a", padding: "2px 6px", borderRadius: "3px" }}>
+                  {item.score}
+                </span>
+              </div>
+            </div>
+
+            {/* Expanded */}
+            {isExpanded && !isEditing && (
+              <div style={{ borderTop: "1px solid #1e1e2a", padding: "12px 14px", paddingLeft: "50px" }}>
+                {item.notes && <p style={{ margin: "0 0 10px", fontSize: "13px", color: "#a0a0b0", lineHeight: 1.5 }}>{item.notes}</p>}
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button onClick={() => onDone(item.id)} style={actionBtn("#5a9e6f")}>✓ Done</button>
+                  <button onClick={() => setEditing(item)} style={actionBtn("#5a5aff")}>Edit</button>
+                  <button onClick={() => onDelete(item.id)} style={actionBtn("#ff4d4d")}>Delete</button>
+                </div>
+              </div>
+            )}
+
+            {/* Edit form */}
+            {isEditing && (
+              <EditForm item={editing} onSave={onSave} onCancel={() => setEditing(null)} projects={projects} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Intake View ───────────────────────────────────────────────────────────────
+
+function IntakeView({ ranked, projects }) {
+  return (
+    <div style={{ border: "1px solid #1e1e2a", borderRadius: "6px", overflow: "hidden" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "32px 1fr 80px 60px 50px", gap: "0", borderBottom: "1px solid #1e1e2a" }}>
+        {["#", "Title", "Due", "Pri", "Pts"].map(h => (
+          <div key={h} style={{ padding: "8px 10px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#5a5a6a", letterSpacing: "0.08em" }}>{h}</div>
+        ))}
+      </div>
+      {ranked.map((item, idx) => {
+        const dl = daysLabel(item.dueDate);
+        return (
+          <div key={item.id} style={{
+            display: "grid",
+            gridTemplateColumns: "32px 1fr 80px 60px 50px",
+            borderBottom: "1px solid #1a1a24",
+            background: idx % 2 === 0 ? "transparent" : "#11111a",
+          }}>
+            <div style={{ padding: "10px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", color: "#5a5a6a" }}>#{idx + 1}</div>
+            <div style={{ padding: "10px", fontSize: "13px", color: "#c0c0d0" }}>{item.title}</div>
+            <div style={{ padding: "10px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", color: dl?.color || "#5a5a6a" }}>{dl?.label || "—"}</div>
+            <div style={{ padding: "10px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", color: PRIORITY_COLOR[item.priority] }}>{item.priority}</div>
+            <div style={{ padding: "10px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", color: "#5a5a6a" }}>{item.score}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Edit Form ─────────────────────────────────────────────────────────────────
+
+function EditForm({ item, onSave, onCancel, projects }) {
+  const [form, setForm] = useState({ ...item });
+  return (
+    <div style={{ borderTop: "1px solid #1e1e2a", padding: "12px 14px" }}>
+      <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} style={{ ...inputStyle, marginBottom: "8px" }} />
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", marginBottom: "8px" }}>
+        <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))} style={selectStyle}>
+          <option value="task">Task</option>
+          <option value="project">Project</option>
+        </select>
+        <select value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))} style={selectStyle}>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+        </select>
+        <input type="date" value={form.dueDate} onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))} style={selectStyle} />
+      </div>
+      <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} style={{ ...inputStyle, marginBottom: "8px", resize: "vertical" }} />
+      <div style={{ display: "flex", gap: "8px" }}>
+        <button onClick={() => onSave(form)} style={actionBtn("#5a5aff")}>Save</button>
+        <button onClick={onCancel} style={actionBtn("#5a5a6a")}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Shared styles ─────────────────────────────────────────────────────────────
+
+const inputStyle = {
+  width: "100%",
+  background: "#0e0e16",
+  border: "1px solid #2a2a36",
+  borderRadius: "4px",
+  color: "#e8e8f0",
+  padding: "9px 12px",
+  fontSize: "14px",
+  fontFamily: "'DM Sans', system-ui, sans-serif",
+  outline: "none",
+  boxSizing: "border-box",
+  display: "block",
+};
+
+const selectStyle = {
+  ...inputStyle,
+  cursor: "pointer",
+};
+
+const submitBtnStyle = {
+  marginTop: "10px",
+  width: "100%",
+  padding: "10px",
+  background: "#5a5aff",
+  border: "none",
+  borderRadius: "4px",
+  color: "#fff",
+  fontSize: "13px",
+  fontFamily: "'IBM Plex Mono', monospace",
+  letterSpacing: "0.05em",
+  cursor: "pointer",
+};
+
+function actionBtn(color) {
+  return {
+    padding: "6px 14px",
+    background: "transparent",
+    border: `1px solid ${color}44`,
+    borderRadius: "3px",
+    color: color,
+    fontSize: "12px",
+    fontFamily: "'IBM Plex Mono', monospace",
+    cursor: "pointer",
+  };
+}
