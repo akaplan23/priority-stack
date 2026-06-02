@@ -72,18 +72,18 @@ function parseFreeform(text: string) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function formatDate(str) {
+function formatDate(str: string) {
   if (!str) return "";
   const d = new Date(str + "T12:00:00");
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function daysLabel(str) {
+function daysLabel(str: string) {
   if (!str) return null;
   const now = new Date();
   now.setHours(0, 0, 0, 0);
   const due = new Date(str + "T00:00:00");
-  const diff = Math.round((due - now) / (1000 * 60 * 60 * 24));
+  const diff = Math.round((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
   if (diff < 0)  return { label: `${Math.abs(diff)}d overdue`, color: "#ff4d4d" };
   if (diff === 0) return { label: "today", color: "#ffaa00" };
   if (diff <= 3)  return { label: `${diff}d`, color: "#ffaa00" };
@@ -91,20 +91,20 @@ function daysLabel(str) {
   return { label: `${diff}d`, color: "#5a5a6a" };
 }
 
-const PRIORITY_COLOR = { high: "#ff4d4d", medium: "#ffaa00", low: "#5a9e6f" };
+const PRIORITY_COLOR: Record<string, string> = { high: "#ff4d4d", medium: "#ffaa00", low: "#5a9e6f" };
 
 // ── Main component ────────────────────────────────────────────────────────────
 
 const EMPTY_FORM = { title: "", type: "task", due_date: "", priority: "medium", notes: "", project_id: "" };
 
 export default function PriorityStack() {
-  const [items, setItems] = useState([]);
+  const [items, setItems] = useState<any[]>([]);
   const [view, setView] = useState("stack");
   const [inputMode, setInputMode] = useState("structured");
   const [form, setForm] = useState(EMPTY_FORM);
   const [freeformText, setFreeformText] = useState("");
-  const [expanded, setExpanded] = useState(null);
-  const [editing, setEditing] = useState(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [editing, setEditing] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
@@ -137,7 +137,7 @@ export default function PriorityStack() {
 
   const projects = useMemo(() => items.filter(i => i.type === "project"), [items]);
 
-  async function addItem(raw) {
+  async function addItem(raw: any) {
     const table = raw.type === "project" ? "projects" : "tasks";
     const { data: { session } } = await supabase.auth.getSession();
     const payload = {
@@ -147,7 +147,7 @@ export default function PriorityStack() {
       due_date: raw.due_date || null,
       notes: raw.notes || null,
       project_id: raw.project_id || null,
-      user_id: session.user.id,
+      user_id: session!.user.id,
     };
 
     const { data, error } = await supabase.from(table).insert(payload).select().single();
@@ -155,14 +155,14 @@ export default function PriorityStack() {
     setItems(prev => [...prev, data]);
   }
 
-  function submitStructured(e) {
+  function submitStructured(e: React.FormEvent) {
     e.preventDefault();
     if (!form.title.trim()) return;
     addItem(form);
     setForm(EMPTY_FORM);
   }
 
-  async function submitFreeform(e) {
+  async function submitFreeform(e: React.FormEvent) {
     e.preventDefault();
     if (!freeformText.trim()) return;
     
@@ -185,7 +185,7 @@ export default function PriorityStack() {
     setFreeformText("");
   }
 
-  async function deleteItem(id, type) {
+  async function deleteItem(id: string, type: string) {
     const table = type === "project" ? "projects" : "tasks";
     const { error } = await supabase.from(table).delete().eq('id', id);
     if (error) { console.error('Error deleting item:', error); return; }
@@ -193,7 +193,7 @@ export default function PriorityStack() {
     if (expanded === id) setExpanded(null);
   }
 
-  async function saveEdit(updated) {
+  async function saveEdit(updated: any) {
     const table = updated.type === "project" ? "projects" : "tasks";
     const payload = {
       title: updated.title,
@@ -208,7 +208,7 @@ export default function PriorityStack() {
     setEditing(null);
   }
 
-  async function markDone(id, type) {
+  async function markDone(id: string, type: string) {
     deleteItem(id, type);
   }
 
@@ -378,15 +378,15 @@ export default function PriorityStack() {
 
 // ── Stack View ────────────────────────────────────────────────────────────────
 
-function StackView({ ranked, projects, expanded, setExpanded, editing, setEditing, onDelete, onDone, onSave }) {
+function StackView({ ranked, projects, expanded, setExpanded, editing, setEditing, onDelete, onDone, onSave }: any) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-      {ranked.map((item, idx) => {
+      {ranked.map((item: any, idx: number) => {
         const dl = daysLabel(item.due_date);
         const isTop = idx === 0;
         const isExpanded = expanded === item.id;
         const isEditing = editing?.id === item.id;
-        const project = item.project_id ? projects.find(p => p.id === item.project_id) : null;
+        const project = item.project_id ? projects.find((p: any) => p.id === item.project_id) : null;
 
         return (
           <div key={item.id} style={{
@@ -446,7 +446,7 @@ function StackView({ ranked, projects, expanded, setExpanded, editing, setEditin
 
 // ── Intake View ───────────────────────────────────────────────────────────────
 
-function IntakeView({ ranked, projects }) {
+function IntakeView({ ranked, projects }: any) {
   return (
     <div style={{ border: "1px solid #1e1e2a", borderRadius: "6px", overflow: "hidden" }}>
       <div style={{ display: "grid", gridTemplateColumns: "32px 1fr 80px 60px 50px", gap: "0", borderBottom: "1px solid #1e1e2a" }}>
@@ -454,7 +454,7 @@ function IntakeView({ ranked, projects }) {
           <div key={h} style={{ padding: "8px 10px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#5a5a6a", letterSpacing: "0.08em" }}>{h}</div>
         ))}
       </div>
-      {ranked.map((item, idx) => {
+      {ranked.map((item: any, idx: number) => {
         const dl = daysLabel(item.due_date);
         return (
           <div key={item.id} style={{
@@ -477,24 +477,24 @@ function IntakeView({ ranked, projects }) {
 
 // ── Edit Form ─────────────────────────────────────────────────────────────────
 
-function EditForm({ item, onSave, onCancel, projects }) {
+function EditForm({ item, onSave, onCancel, projects }: any) {
   const [form, setForm] = useState({ ...item });
   return (
     <div style={{ borderTop: "1px solid #1e1e2a", padding: "12px 14px" }}>
-      <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} style={{ ...inputStyle, marginBottom: "8px" }} />
+      <input value={form.title} onChange={e => setForm((f: any) => ({ ...f, title: e.target.value }))} style={{ ...inputStyle, marginBottom: "8px" }} />
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", marginBottom: "8px" }}>
-        <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))} style={selectStyle}>
+        <select value={form.type} onChange={e => setForm((f: any) => ({ ...f, type: e.target.value }))} style={selectStyle}>
           <option value="task">Task</option>
           <option value="project">Project</option>
         </select>
-        <select value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))} style={selectStyle}>
+        <select value={form.priority} onChange={e => setForm((f: any) => ({ ...f, priority: e.target.value }))} style={selectStyle}>
           <option value="high">High</option>
           <option value="medium">Medium</option>
           <option value="low">Low</option>
         </select>
-        <input type="date" value={form.due_date || ""} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))} style={selectStyle} />
+        <input type="date" value={form.due_date || ""} onChange={e => setForm((f: any) => ({ ...f, due_date: e.target.value }))} style={selectStyle} />
       </div>
-      <textarea value={form.notes || ""} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} style={{ ...inputStyle, marginBottom: "8px", resize: "vertical" }} />
+      <textarea value={form.notes || ""} onChange={e => setForm((f: any) => ({ ...f, notes: e.target.value }))} rows={2} style={{ ...inputStyle, marginBottom: "8px", resize: "vertical" }} />
       <div style={{ display: "flex", gap: "8px" }}>
         <button onClick={() => onSave(form)} style={actionBtn("#5a5aff")}>Save</button>
         <button onClick={onCancel} style={actionBtn("#5a5a6a")}>Cancel</button>
@@ -505,7 +505,7 @@ function EditForm({ item, onSave, onCancel, projects }) {
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 
-const inputStyle = {
+const inputStyle: React.CSSProperties = {
   width: "100%",
   background: "#0e0e16",
   border: "1px solid #2a2a36",
@@ -519,12 +519,12 @@ const inputStyle = {
   display: "block",
 };
 
-const selectStyle = {
+const selectStyle: React.CSSProperties = {
   ...inputStyle,
   cursor: "pointer",
 };
 
-const submitBtnStyle = {
+const submitBtnStyle: React.CSSProperties = {
   marginTop: "10px",
   width: "100%",
   padding: "10px",
@@ -538,7 +538,7 @@ const submitBtnStyle = {
   cursor: "pointer",
 };
 
-function actionBtn(color) {
+function actionBtn(color: string): React.CSSProperties {
   return {
     padding: "6px 14px",
     background: "transparent",
