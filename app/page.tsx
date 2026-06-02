@@ -162,10 +162,26 @@ export default function PriorityStack() {
     setForm(EMPTY_FORM);
   }
 
-  function submitFreeform(e) {
+  async function submitFreeform(e) {
     e.preventDefault();
     if (!freeformText.trim()) return;
-    addItem(parseFreeform(freeformText));
+    
+    try {
+      const response = await fetch('/api/parse-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: freeformText }),
+      });
+      
+      if (!response.ok) throw new Error('Parse failed');
+      
+      const parsed = await response.json();
+      addItem(parsed);
+    } catch (error) {
+      console.error('Freeform parse error:', error);
+      addItem(parseFreeform(freeformText));
+    }
+    
     setFreeformText("");
   }
 
