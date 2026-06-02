@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase'
 
 // ── Scoring ──────────────────────────────────────────────────────────────────
 
-function computeScore(item) {
+function computeScore(item: any) {
   const now = Date.now();
   let score = 0;
 
