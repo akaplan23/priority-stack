@@ -37,7 +37,7 @@ function computeScore(item: any) {
 
 // ── Freeform parser ───────────────────────────────────────────────────────────
 
-function parseFreeform(text) {
+function parseFreeform(text: string) {
   const lower = text.toLowerCase();
   const title = text.split("\n")[0].slice(0, 80);
 
