@@ -1,0 +1,8 @@
+Priority Stack
+
+Phase 2 things to copy/save:
+
+API URL: https://mubxwyliwmhufqemwspe.supabase.co/rest/v1/
+
+anon public key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im11Ynh3eWxpd21odWZxZW13c3BlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzNDEyOTQsImV4cCI6MjA5NTkxNzI5NH0.luZt3erDtTXjbnRj2eORbqhaRykgyAEyvUnNz4O7qqs
+

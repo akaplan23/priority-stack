@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from '../lib/supabase'
 
 // ── Scoring ──────────────────────────────────────────────────────────────────
 
@@ -8,8 +10,8 @@ function computeScore(item) {
   const now = Date.now();
   let score = 0;
 
-  if (item.dueDate) {
-    const due = new Date(item.dueDate).getTime();
+  if (item.due_date) {
+    const due = new Date(item.due_date).getTime();
     const days = (due - now) / (1000 * 60 * 60 * 24);
     if (days < 0)        score += 200;
     else if (days <= 1)  score += 100;
@@ -43,18 +45,18 @@ function parseFreeform(text) {
   if (/\b(urgent|critical|blocking|asap|high priority)\b/.test(lower)) priority = "high";
   else if (/\b(low priority|whenever|someday|eventually)\b/.test(lower)) priority = "low";
 
-  let dueDate = "";
+  let due_date = "";
   const todayMatch = /\b(today|eod|end of day)\b/.test(lower);
   const tomorrowMatch = /\btomorrow\b/.test(lower);
   const dayMatch = lower.match(/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/);
 
   const today = new Date();
   if (todayMatch) {
-    dueDate = today.toISOString().split("T")[0];
+    due_date = today.toISOString().split("T")[0];
   } else if (tomorrowMatch) {
     const t = new Date(today);
     t.setDate(t.getDate() + 1);
-    dueDate = t.toISOString().split("T")[0];
+    due_date = t.toISOString().split("T")[0];
   } else if (dayMatch) {
     const days = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
     const target = days.indexOf(dayMatch[1]);
@@ -62,17 +64,13 @@ function parseFreeform(text) {
     const diff = (target - current + 7) % 7 || 7;
     const d = new Date(today);
     d.setDate(d.getDate() + diff);
-    dueDate = d.toISOString().split("T")[0];
+    due_date = d.toISOString().split("T")[0];
   }
 
-  return { title, priority, dueDate, notes: text, type: "task" };
+  return { title, priority, due_date, notes: text, type: "task" };
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function uid() {
-  return Math.random().toString(36).slice(2, 10);
-}
 
 function formatDate(str) {
   if (!str) return "";
@@ -97,16 +95,39 @@ const PRIORITY_COLOR = { high: "#ff4d4d", medium: "#ffaa00", low: "#5a9e6f" };
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-const EMPTY_FORM = { title: "", type: "task", dueDate: "", priority: "medium", notes: "", projectId: "" };
+const EMPTY_FORM = { title: "", type: "task", due_date: "", priority: "medium", notes: "", project_id: "" };
 
 export default function PriorityStack() {
   const [items, setItems] = useState([]);
-  const [view, setView] = useState("stack"); // "stack" | "intake"
-  const [inputMode, setInputMode] = useState("structured"); // "structured" | "freeform"
+  const [view, setView] = useState("stack");
+  const [inputMode, setInputMode] = useState("structured");
   const [form, setForm] = useState(EMPTY_FORM);
   const [freeformText, setFreeformText] = useState("");
   const [expanded, setExpanded] = useState(null);
   const [editing, setEditing] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+
+  useEffect(() => {
+    async function init() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push('/login');
+        return;
+      }
+
+      const { data: tasks, error: tasksError } = await supabase.from('tasks').select('*');
+      const { data: projects, error: projectsError } = await supabase.from('projects').select('*');
+
+      if (tasksError) console.error('Error loading tasks:', tasksError);
+      if (projectsError) console.error('Error loading projects:', projectsError);
+
+      const all = [...(tasks || []), ...(projects || [])];
+      setItems(all);
+      setLoading(false);
+    }
+    init();
+  }, []);
 
   const ranked = useMemo(() => {
     return [...items]
@@ -116,9 +137,22 @@ export default function PriorityStack() {
 
   const projects = useMemo(() => items.filter(i => i.type === "project"), [items]);
 
-  function addItem(raw) {
-    const item = { ...EMPTY_FORM, ...raw, id: uid(), createdAt: Date.now() };
-    setItems(prev => [...prev, item]);
+  async function addItem(raw) {
+    const table = raw.type === "project" ? "projects" : "tasks";
+    const { data: { session } } = await supabase.auth.getSession();
+    const payload = {
+      title: raw.title,
+      type: raw.type,
+      priority: raw.priority || "medium",
+      due_date: raw.due_date || null,
+      notes: raw.notes || null,
+      project_id: raw.project_id || null,
+      user_id: session.user.id,
+    };
+
+    const { data, error } = await supabase.from(table).insert(payload).select().single();
+    if (error) { console.error('Error adding item:', error); return; }
+    setItems(prev => [...prev, data]);
   }
 
   function submitStructured(e) {
@@ -135,18 +169,39 @@ export default function PriorityStack() {
     setFreeformText("");
   }
 
-  function deleteItem(id) {
+  async function deleteItem(id, type) {
+    const table = type === "project" ? "projects" : "tasks";
+    const { error } = await supabase.from(table).delete().eq('id', id);
+    if (error) { console.error('Error deleting item:', error); return; }
     setItems(prev => prev.filter(i => i.id !== id));
     if (expanded === id) setExpanded(null);
   }
 
-  function saveEdit(updated) {
-    setItems(prev => prev.map(i => i.id === updated.id ? updated : i));
+  async function saveEdit(updated) {
+    const table = updated.type === "project" ? "projects" : "tasks";
+    const payload = {
+      title: updated.title,
+      priority: updated.priority,
+      due_date: updated.due_date || null,
+      notes: updated.notes || null,
+      project_id: updated.project_id || null,
+    };
+    const { data, error } = await supabase.from(table).update(payload).eq('id', updated.id).select().single();
+    if (error) { console.error('Error updating item:', error); return; }
+    setItems(prev => prev.map(i => i.id === data.id ? data : i));
     setEditing(null);
   }
 
-  function markDone(id) {
-    deleteItem(id);
+  async function markDone(id, type) {
+    deleteItem(id, type);
+  }
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#0e0e16", color: "#5a5a6a", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'IBM Plex Mono', monospace", fontSize: "13px" }}>
+        loading stack...
+      </div>
+    );
   }
 
   return (
@@ -157,7 +212,6 @@ export default function PriorityStack() {
       fontFamily: "'DM Sans', system-ui, sans-serif",
       padding: "0",
     }}>
-      {/* Header */}
       <header style={{
         borderBottom: "1px solid #1e1e2a",
         padding: "16px 24px",
@@ -173,7 +227,21 @@ export default function PriorityStack() {
           <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "13px", color: "#5a5aff", letterSpacing: "0.1em" }}>PS</span>
           <span style={{ fontSize: "15px", fontWeight: 600, color: "#e8e8f0" }}>Priority Stack</span>
         </div>
-        <div style={{ display: "flex", gap: "8px" }}>
+        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          <button
+            onClick={async () => { await supabase.auth.signOut(); router.push('/login'); }}
+            style={{
+              fontFamily: "'IBM Plex Mono', monospace",
+              fontSize: "11px",
+              padding: "5px 12px",
+              borderRadius: "3px",
+              border: "1px solid #2a2a36",
+              background: "transparent",
+              color: "#5a5a6a",
+              cursor: "pointer",
+              letterSpacing: "0.08em",
+            }}
+          >sign out</button>
           {["stack", "intake"].map(v => (
             <button key={v} onClick={() => setView(v)} style={{
               fontFamily: "'IBM Plex Mono', monospace",
@@ -193,8 +261,6 @@ export default function PriorityStack() {
       </header>
 
       <div style={{ maxWidth: "680px", margin: "0 auto", padding: "24px 16px" }}>
-
-        {/* Input Panel */}
         <div style={{
           border: "1px solid #1e1e2a",
           borderRadius: "6px",
@@ -202,7 +268,6 @@ export default function PriorityStack() {
           marginBottom: "24px",
           overflow: "hidden",
         }}>
-          {/* Mode toggle */}
           <div style={{ display: "flex", borderBottom: "1px solid #1e1e2a" }}>
             {["structured", "freeform"].map(m => (
               <button key={m} onClick={() => setInputMode(m)} style={{
@@ -239,10 +304,10 @@ export default function PriorityStack() {
                     <option value="medium">Medium</option>
                     <option value="low">Low</option>
                   </select>
-                  <input type="date" value={form.dueDate} onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))} style={selectStyle} />
+                  <input type="date" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))} style={selectStyle} />
                 </div>
                 {projects.length > 0 && (
-                  <select value={form.projectId} onChange={e => setForm(f => ({ ...f, projectId: e.target.value }))} style={{ ...selectStyle, marginBottom: "8px", width: "100%" }}>
+                  <select value={form.project_id} onChange={e => setForm(f => ({ ...f, project_id: e.target.value }))} style={{ ...selectStyle, marginBottom: "8px", width: "100%" }}>
                     <option value="">No project</option>
                     {projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
                   </select>
@@ -271,7 +336,6 @@ export default function PriorityStack() {
           </div>
         </div>
 
-        {/* Stack / Intake views */}
         {items.length === 0 ? (
           <div style={{ textAlign: "center", color: "#5a5a6a", fontFamily: "'IBM Plex Mono', monospace", fontSize: "12px", padding: "48px 0" }}>
             stack is empty — add something above
@@ -302,11 +366,11 @@ function StackView({ ranked, projects, expanded, setExpanded, editing, setEditin
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
       {ranked.map((item, idx) => {
-        const dl = daysLabel(item.dueDate);
+        const dl = daysLabel(item.due_date);
         const isTop = idx === 0;
         const isExpanded = expanded === item.id;
         const isEditing = editing?.id === item.id;
-        const project = item.projectId ? projects.find(p => p.id === item.projectId) : null;
+        const project = item.project_id ? projects.find(p => p.id === item.project_id) : null;
 
         return (
           <div key={item.id} style={{
@@ -315,12 +379,10 @@ function StackView({ ranked, projects, expanded, setExpanded, editing, setEditin
             background: isTop ? "#1a1014" : "#13131c",
             overflow: "hidden",
           }}>
-            {/* Row */}
             <div
               onClick={() => !isEditing && setExpanded(isExpanded ? null : item.id)}
               style={{ display: "flex", alignItems: "center", padding: "12px 14px", gap: "12px", cursor: "pointer" }}
             >
-              {/* Rank */}
               <span style={{
                 fontFamily: "'IBM Plex Mono', monospace",
                 fontSize: "11px",
@@ -329,13 +391,11 @@ function StackView({ ranked, projects, expanded, setExpanded, editing, setEditin
                 fontWeight: isTop ? 700 : 400,
               }}>#{idx + 1}</span>
 
-              {/* Title */}
               <span style={{ flex: 1, fontSize: "14px", fontWeight: isTop ? 600 : 400, color: isTop ? "#e8e8f0" : "#c0c0d0" }}>
                 {item.title}
                 {project && <span style={{ marginLeft: "8px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#5a5a6a" }}>↳ {project.title}</span>}
               </span>
 
-              {/* Badges */}
               <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
                 {dl && <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: dl.color }}>{dl.label}</span>}
                 <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: PRIORITY_COLOR[item.priority] }}>
@@ -347,19 +407,17 @@ function StackView({ ranked, projects, expanded, setExpanded, editing, setEditin
               </div>
             </div>
 
-            {/* Expanded */}
             {isExpanded && !isEditing && (
               <div style={{ borderTop: "1px solid #1e1e2a", padding: "12px 14px", paddingLeft: "50px" }}>
                 {item.notes && <p style={{ margin: "0 0 10px", fontSize: "13px", color: "#a0a0b0", lineHeight: 1.5 }}>{item.notes}</p>}
                 <div style={{ display: "flex", gap: "8px" }}>
-                  <button onClick={() => onDone(item.id)} style={actionBtn("#5a9e6f")}>✓ Done</button>
+                  <button onClick={() => onDone(item.id, item.type)} style={actionBtn("#5a9e6f")}>✓ Done</button>
                   <button onClick={() => setEditing(item)} style={actionBtn("#5a5aff")}>Edit</button>
-                  <button onClick={() => onDelete(item.id)} style={actionBtn("#ff4d4d")}>Delete</button>
+                  <button onClick={() => onDelete(item.id, item.type)} style={actionBtn("#ff4d4d")}>Delete</button>
                 </div>
               </div>
             )}
 
-            {/* Edit form */}
             {isEditing && (
               <EditForm item={editing} onSave={onSave} onCancel={() => setEditing(null)} projects={projects} />
             )}
@@ -381,7 +439,7 @@ function IntakeView({ ranked, projects }) {
         ))}
       </div>
       {ranked.map((item, idx) => {
-        const dl = daysLabel(item.dueDate);
+        const dl = daysLabel(item.due_date);
         return (
           <div key={item.id} style={{
             display: "grid",
@@ -418,9 +476,9 @@ function EditForm({ item, onSave, onCancel, projects }) {
           <option value="medium">Medium</option>
           <option value="low">Low</option>
         </select>
-        <input type="date" value={form.dueDate} onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))} style={selectStyle} />
+        <input type="date" value={form.due_date || ""} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))} style={selectStyle} />
       </div>
-      <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} style={{ ...inputStyle, marginBottom: "8px", resize: "vertical" }} />
+      <textarea value={form.notes || ""} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} style={{ ...inputStyle, marginBottom: "8px", resize: "vertical" }} />
       <div style={{ display: "flex", gap: "8px" }}>
         <button onClick={() => onSave(form)} style={actionBtn("#5a5aff")}>Save</button>
         <button onClick={onCancel} style={actionBtn("#5a5a6a")}>Cancel</button>
