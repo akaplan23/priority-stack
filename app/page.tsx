@@ -411,10 +411,13 @@ function StackView({ ranked, projects, expanded, setExpanded, editing, setEditin
                 fontWeight: isTop ? 700 : 400,
               }}>#{idx + 1}</span>
 
-              <span style={{ flex: 1, fontSize: "14px", fontWeight: isTop ? 600 : 400, color: isTop ? "#e8e8f0" : "#c0c0d0" }}>
-                {item.title}
-                {project && <span style={{ marginLeft: "8px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#5a5a6a" }}>↳ {project.title}</span>}
-              </span>
+<span style={{ flex: 1, fontSize: "14px", fontWeight: isTop ? 600 : 400, color: isTop ? "#e8e8f0" : "#c0c0d0" }}>
+  {item.title}
+  {item.type === "project" && (
+    <span style={{ marginLeft: "8px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#5a5aff", background: "#5a5aff18", padding: "2px 6px", borderRadius: "3px", letterSpacing: "0.08em" }}>PRJ</span>
+  )}
+  {project && <span style={{ marginLeft: "8px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#5a5a6a" }}>↳ {project.title}</span>}
+</span>
 
               <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
                 {dl && <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: dl.color }}>{dl.label}</span>}
