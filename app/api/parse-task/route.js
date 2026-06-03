@@ -33,7 +33,7 @@ Return this exact structure:
 
 Rules:
 - title should be concise and action-oriented, max 60 characters
-- type is "project" only if it's clearly a multi-step initiative, otherwise "task"
+- type: always return "task" unless the user explicitly uses the word "project" to describe a multi-step initiative they want to track as a container. A task that mentions a project name is still a "task"
 - priority: "high" if blocking/urgent/critical, "low" if someday/eventually, otherwise "medium"
 - due_date: convert relative dates to actual YYYY-MM-DD dates. Today is ${new Date().toISOString().split("T")[0]} which is a Tuesday. "EOD Friday" or "by Friday" means the upcoming Friday. "tomorrow" means the next calendar day. "next week" means 7 days from today. Never return today's date unless the text explicitly says "today" or "EOD today".
 - notes: capture any context that didn't fit in the title`,

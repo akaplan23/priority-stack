@@ -140,15 +140,19 @@ export default function PriorityStack() {
   async function addItem(raw: any) {
     const table = raw.type === "project" ? "projects" : "tasks";
     const { data: { session } } = await supabase.auth.getSession();
-    const payload = {
+
+    const payload: any = {
       title: raw.title,
       type: raw.type,
       priority: raw.priority || "medium",
       due_date: raw.due_date || null,
       notes: raw.notes || null,
-      project_id: raw.project_id || null,
       user_id: session!.user.id,
     };
+
+    if (raw.type !== "project") {
+      payload.project_id = raw.project_id || null;
+    }
 
     const { data, error } = await supabase.from(table).insert(payload).select().single();
     if (error) { console.error('Error adding item:', error); return; }
