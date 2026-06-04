@@ -13,18 +13,18 @@ function computeScore(item: any) {
   if (item.due_date) {
     const due = new Date(item.due_date).getTime();
     const days = (due - now) / (1000 * 60 * 60 * 24);
-    if (days < 0)        score += 200;
-    else if (days <= 1)  score += 100;
-    else if (days <= 3)  score += 80;
-    else if (days <= 7)  score += 60;
-    else if (days <= 14) score += 40;
-    else if (days <= 30) score += 20;
+    if (days < 0)        score += 150;
+    else if (days <= 1)  score += 70;
+    else if (days <= 3)  score += 50;
+    else if (days <= 7)  score += 35;
+    else if (days <= 14) score += 20;
+    else if (days <= 30) score += 10;
   } else {
     score += 5;
   }
 
-  if (item.priority === "high")   score += 90;
-  if (item.priority === "medium") score += 60;
+  if (item.priority === "high")   score += 120;
+  if (item.priority === "medium") score += 70;
   if (item.priority === "low")    score += 30;
   if (item.type === "task")       score += 10;
 
