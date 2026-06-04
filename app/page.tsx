@@ -327,7 +327,10 @@ export default function PriorityStack() {
                     <option value="medium">Medium</option>
                     <option value="low">Low</option>
                   </select>
-                  <input type="date" placeholder="mm/dd/yyyy" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))} style={selectStyle} />
+                  <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                    <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#5a5a6a", letterSpacing: "0.08em" }}>due date</span>
+                    <input type="date" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))} style={selectStyle} />
+                  </div>
                 </div>
                 {projects.length > 0 && (
                   <select value={form.project_id} onChange={e => setForm(f => ({ ...f, project_id: e.target.value }))} style={{ ...selectStyle, marginBottom: "8px", width: "100%" }}>
@@ -504,7 +507,10 @@ function EditForm({ item, onSave, onCancel, projects }: any) {
           <option value="medium">Medium</option>
           <option value="low">Low</option>
         </select>
-        <input type="date" placeholder="mm/dd/yyyy" value={form.due_date || ""} onChange={e => setForm((f: any) => ({ ...f, due_date: e.target.value }))} style={selectStyle} />
+        <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+          <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#5a5a6a", letterSpacing: "0.08em" }}>due date</span>
+          <input type="date" value={form.due_date || ""} onChange={e => setForm((f: any) => ({ ...f, due_date: e.target.value }))} style={selectStyle} />
+        </div>
       </div>
       <textarea value={form.notes || ""} onChange={e => setForm((f: any) => ({ ...f, notes: e.target.value }))} rows={2} style={{ ...inputStyle, marginBottom: "8px", resize: "vertical" }} />
       <div style={{ display: "flex", gap: "8px" }}>
