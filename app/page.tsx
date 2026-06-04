@@ -106,6 +106,7 @@ export default function PriorityStack() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [editing, setEditing] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -169,23 +170,25 @@ export default function PriorityStack() {
   async function submitFreeform(e: React.FormEvent) {
     e.preventDefault();
     if (!freeformText.trim()) return;
-    
+
+    setIsSubmitting(true);
     try {
       const response = await fetch('/api/parse-task', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: freeformText }),
       });
-      
+
       if (!response.ok) throw new Error('Parse failed');
-      
+
       const parsed = await response.json();
       addItem(parsed);
     } catch (error) {
       console.error('Freeform parse error:', error);
       addItem(parseFreeform(freeformText));
     }
-    
+
+    setIsSubmitting(false);
     setFreeformText("");
   }
 
@@ -350,7 +353,9 @@ export default function PriorityStack() {
                   rows={4}
                   style={{ ...inputStyle, resize: "vertical" }}
                 />
-                <button type="submit" style={submitBtnStyle}>Parse + add</button>
+                <button type="submit" disabled={isSubmitting} style={{ ...submitBtnStyle, opacity: isSubmitting ? 0.6 : 1, cursor: isSubmitting ? "not-allowed" : "pointer" }}>
+                  {isSubmitting ? "parsing..." : "Parse + add"}
+                </button>
               </form>
             )}
           </div>
@@ -411,13 +416,13 @@ function StackView({ ranked, projects, expanded, setExpanded, editing, setEditin
                 fontWeight: isTop ? 700 : 400,
               }}>#{idx + 1}</span>
 
-<span style={{ flex: 1, fontSize: "14px", fontWeight: isTop ? 600 : 400, color: isTop ? "#e8e8f0" : "#c0c0d0" }}>
-  {item.title}
-  {item.type === "project" && (
-    <span style={{ marginLeft: "8px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#5a5aff", background: "#5a5aff18", padding: "2px 6px", borderRadius: "3px", letterSpacing: "0.08em" }}>PRJ</span>
-  )}
-  {project && <span style={{ marginLeft: "8px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#5a5a6a" }}>↳ {project.title}</span>}
-</span>
+              <span style={{ flex: 1, fontSize: "14px", fontWeight: isTop ? 600 : 400, color: isTop ? "#e8e8f0" : "#c0c0d0" }}>
+                {item.title}
+                {item.type === "project" && (
+                  <span style={{ marginLeft: "8px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#5a5aff", background: "#5a5aff18", padding: "2px 6px", borderRadius: "3px", letterSpacing: "0.08em" }}>PRJ</span>
+                )}
+                {project && <span style={{ marginLeft: "8px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#5a5a6a" }}>↳ {project.title}</span>}
+              </span>
 
               <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
                 {dl && <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: dl.color }}>{dl.label}</span>}
