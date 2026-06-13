@@ -329,7 +329,12 @@ export default function PriorityStack() {
                   </select>
                   <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
                     <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#5a5a6a", letterSpacing: "0.08em" }}>due date</span>
-                    <input type="date" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))} style={selectStyle} />
+                    <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+                      <input type="date" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))} style={{ ...selectStyle, flex: 1 }} />
+                      {form.due_date && (
+                        <button type="button" onClick={() => setForm(f => ({ ...f, due_date: "" }))} style={{ background: "transparent", border: "1px solid #2a2a36", borderRadius: "4px", color: "#5a5a6a", cursor: "pointer", fontSize: "12px", padding: "0 8px", height: "38px", fontFamily: "'IBM Plex Mono', monospace" }}>✕</button>
+                      )}
+                    </div>
                   </div>
                 </div>
                 {projects.length > 0 && (
@@ -509,7 +514,12 @@ function EditForm({ item, onSave, onCancel, projects }: any) {
         </select>
         <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
           <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10px", color: "#5a5a6a", letterSpacing: "0.08em" }}>due date</span>
-          <input type="date" value={form.due_date || ""} onChange={e => setForm((f: any) => ({ ...f, due_date: e.target.value }))} style={selectStyle} />
+          <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+            <input type="date" value={form.due_date || ""} onChange={e => setForm((f: any) => ({ ...f, due_date: e.target.value }))} style={{ ...selectStyle, flex: 1 }} />
+            {form.due_date && (
+              <button type="button" onClick={() => setForm((f: any) => ({ ...f, due_date: "" }))} style={{ background: "transparent", border: "1px solid #2a2a36", borderRadius: "4px", color: "#5a5a6a", cursor: "pointer", fontSize: "12px", padding: "0 8px", height: "38px", fontFamily: "'IBM Plex Mono', monospace" }}>✕</button>
+            )}
+          </div>
         </div>
       </div>
       <textarea value={form.notes || ""} onChange={e => setForm((f: any) => ({ ...f, notes: e.target.value }))} rows={2} style={{ ...inputStyle, marginBottom: "8px", resize: "vertical" }} />
